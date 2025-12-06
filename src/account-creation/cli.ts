@@ -115,6 +115,12 @@ async function main(): Promise<void> {
   log(false, 'CREATOR-CLI', '   Everything is fully automated. Any interaction may break the process.', 'warn', 'yellow')
   log(false, 'CREATOR-CLI', '   Only interact when explicitly asked (e.g., CAPTCHA solving).', 'warn', 'yellow')
   log(false, 'CREATOR-CLI', '='.repeat(60), 'log', 'cyan')
+  log(false, 'CREATOR-CLI', 'Recommended anti-detection flow:', 'log', 'cyan')
+  log(false, 'CREATOR-CLI', ' 1) Use a residential/ISP proxy and keep region/timezone consistent.', 'log', 'gray')
+  log(false, 'CREATOR-CLI', ' 2) After creation, stay logged in 2–3 min, browse Outlook/Bing manually, then sign out.', 'log', 'gray')
+  log(false, 'CREATOR-CLI', ' 3) Wait 48–72h (ideally 5–7 days) before first Rewards run from the same IP/UA.', 'log', 'gray')
+  log(false, 'CREATOR-CLI', ' 4) Space creations: 5–10 min minimum between accounts; avoid bursts.', 'log', 'gray')
+  log(false, 'CREATOR-CLI', '='.repeat(60), 'log', 'cyan')
   log(false, 'CREATOR-CLI', '', 'log') // Empty line
 
   // Show usage help if no arguments passed
@@ -123,6 +129,8 @@ async function main(): Promise<void> {
     log(false, 'CREATOR-CLI', '   npm run creator -- -y                                    # Auto mode', 'log', 'gray')
     log(false, 'CREATOR-CLI', '   npm run creator -- -y email@gmail.com                     # With recovery email', 'log', 'gray')
     log(false, 'CREATOR-CLI', '   npm run creator -- -y email@gmail.com "https://rewards..." # Full automation (QUOTES REQUIRED!)', 'log', 'gray')
+    log(false, 'CREATOR-CLI', '   npm run creator -- --proxy=http://user:pass@host:port -y email@gmail.com "https://rewards..." # With proxy', 'log', 'gray')
+    log(false, 'CREATOR-CLI', '   CREATOR_PROXY_URL=http://user:pass@host:port npm run creator -- -y email@gmail.com "https://rewards..."  # Proxy via env', 'log', 'gray')
     log(false, 'CREATOR-CLI', '', 'log')
     log(false, 'CREATOR-CLI', '⚠️  IMPORTANT: Put -y and email BEFORE the URL!', 'warn', 'yellow')
     log(false, 'CREATOR-CLI', '⚠️  IMPORTANT: Always put QUOTES around the URL if it contains "&"', 'warn', 'yellow')
