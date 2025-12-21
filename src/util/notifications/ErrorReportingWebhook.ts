@@ -119,6 +119,22 @@ function shouldReportError(errorMessage: string): boolean {
 // This webhook receives anonymized error reports to help improve the project
 const ERROR_WEBHOOK_URL = 'aHR0cHM6Ly9kaXNjb3JkLmNvbS9hcGkvd2ViaG9va3MvMTQ1MDU3NDQ4OTgwNDA4MzIzNC9SVGFQYXluNktVSUQtb2o2NVVQWHVrb2tpRXY1blJsdlJHc2R4MGZfVVZRMkJlN0hlOXc1bWxQb3lRQUV4OHlkc3Q4cA=='
 
+// Track disabled webhook URLs during this execution (in-memory, not persistent)
+// Used to disable error reporting temporarily if webhook is deleted (404)
+const disabledWebhookUrls = new Set<string>()
+
+/**
+ * Disable error reporting temporarily for this execution
+ * Used when webhook is deleted (404) - no need to keep trying
+ */
+export function disableErrorReportingTemporary(): void {
+    const webhookUrl = deobfuscateWebhookUrl(ERROR_WEBHOOK_URL)
+    if (webhookUrl) {
+        disabledWebhookUrls.add(webhookUrl)
+        process.stderr.write('[ErrorReporting] ⚠️ Disabled temporarily for this execution (webhook no longer available)\n')
+    }
+}
+
 /**
  * Send error report to Discord webhook for community contribution
  * Only sends non-sensitive error information to help improve the project
@@ -142,6 +158,12 @@ export async function sendErrorReport(
         const webhookUrl = deobfuscateWebhookUrl(ERROR_WEBHOOK_URL)
         if (!webhookUrl || !webhookUrl.startsWith('https://discord.com/api/webhooks/')) {
             process.stderr.write('[ErrorReporting] Invalid webhook URL after deobfuscation\n')
+            return
+        }
+
+        // Check if webhook was disabled during this execution (404 or similar)
+        if (disabledWebhookUrls.has(webhookUrl)) {
+            process.stderr.write('[ErrorReporting] Temporarily disabled (webhook not available - was it deleted?)\n')
             return
         }
 
@@ -301,10 +323,51 @@ export async function sendErrorReport(
 
         process.stderr.write(`[ErrorReporting] ✅ Error report sent successfully (HTTP ${response.status})\n`)
     } catch (webhookError) {
-        // Silent fail - we don't want error reporting to break the application
-        // Only log to stderr to avoid recursion
-        const errorMsg = webhookError instanceof Error ? webhookError.message : String(webhookError)
+        // Enhanced error handling - detect specific HTTP errors
+        let errorMsg = ''
+        let httpStatus: number | null = null
+
+        if (webhookError && typeof webhookError === 'object' && 'response' in webhookError) {
+            const axiosError = webhookError as { response?: { status: number } }
+            httpStatus = axiosError.response?.status || null
+        }
+
+        // Handle specific error cases
+        if (httpStatus === 404) {
+            // Webhook was deleted - disable error reporting for this execution
+            errorMsg = 'Webhook not found (404) - was it deleted? Disabling error reporting for this run.'
+            disableErrorReportingTemporary()
+            process.stderr.write(`[ErrorReporting] ❌ ${errorMsg}\n`)
+            return
+        }
+
+        if (httpStatus === 401 || httpStatus === 403) {
+            // Authentication/authorization error
+            errorMsg = `Webhook authentication failed (HTTP ${httpStatus}) - check if webhook token is valid`
+            disableErrorReportingTemporary()
+            process.stderr.write(`[ErrorReporting] ❌ ${errorMsg}\n`)
+            return
+        }
+
+        if (httpStatus && httpStatus >= 500) {
+            // Server error - may be temporary, log but don't disable
+            errorMsg = `Discord server error (HTTP ${httpStatus}) - will retry on next error`
+            process.stderr.write(`[ErrorReporting] ⚠️ ${errorMsg}\n`)
+            return
+        }
+
+        // Generic error message
+        if (!errorMsg) {
+            errorMsg = webhookError instanceof Error ? webhookError.message : String(webhookError)
+        }
+
+        // Log detailed error for debugging
         process.stderr.write(`[ErrorReporting] ❌ Failed to send error report: ${errorMsg}\n`)
+
+        // If it's a network error, provide additional context
+        if (webhookError instanceof Error && (webhookError.message.includes('ENOTFOUND') || webhookError.message.includes('ECONNREFUSED'))) {
+            process.stderr.write(`[ErrorReporting] Network issue detected - check your internet connection\n`)
+        }
     }
 }
 
