@@ -25,7 +25,7 @@ function isRateLimited(ip) {
 // Sanitize text to prevent Discord mention abuse
 function sanitizeDiscordText(text) {
     if (!text) return ''
-    
+
     return String(text)
         // Remove @everyone and @here mentions
         .replace(/@(everyone|here)/gi, '@\u200b$1')
