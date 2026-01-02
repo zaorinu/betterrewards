@@ -93,6 +93,56 @@ export class DashboardServer {
       res.json({ status: 'ok', uptime: process.uptime() })
     })
 
+    // Error reporting endpoint (community error collection)
+    this.app.post('/api/report-error', this.apiLimiter, async (req, res) => {
+      try {
+        const webhookUrl = process.env.DISCORD_ERROR_WEBHOOK_URL
+        if (!webhookUrl) {
+          dashLog('Error reporting: DISCORD_ERROR_WEBHOOK_URL not configured', 'warn')
+          return res.status(503).json({ error: 'Error reporting service unavailable' })
+        }
+
+        const payload = req.body
+        if (!payload?.error) {
+          return res.status(400).json({ error: 'Invalid payload' })
+        }
+
+        // Build Discord embed
+        const embed = {
+          title: '🔴 Bot Error Report',
+          description: `\`\`\`\n${String(payload.error).slice(0, 1900)}\n\`\`\``,
+          color: 0xdc143c,
+          fields: [
+            { name: 'Version', value: String(payload.context?.version || 'unknown'), inline: true },
+            { name: 'Platform', value: String(payload.context?.platform || 'unknown'), inline: true },
+            { name: 'Node', value: String(payload.context?.nodeVersion || 'unknown'), inline: true }
+          ],
+          timestamp: new Date().toISOString(),
+          footer: { text: 'Community Error Reporting' }
+        }
+
+        if (payload.stack) {
+          const stackLines = String(payload.stack).split('\n').slice(0, 15).join('\n')
+          embed.fields.push({ name: 'Stack Trace', value: `\`\`\`\n${stackLines.slice(0, 1000)}\n\`\`\``, inline: false })
+        }
+
+        // Send to Discord (use native axios, not AxiosClient)
+        const axios = (await import('axios')).default
+        await axios.post(webhookUrl, {
+          username: 'Microsoft Rewards Bot',
+          avatar_url: 'https://raw.githubusercontent.com/LightZirconite/Microsoft-Rewards-Bot/refs/heads/main/assets/logo.png',
+          embeds: [embed]
+        }, { timeout: 10000 })
+
+        dashLog('Error report sent to Discord', 'log')
+        return res.json({ success: true, message: 'Error report received' })
+
+      } catch (error) {
+        dashLog(`Error reporting failed: ${error instanceof Error ? error.message : String(error)}`, 'error')
+        return res.status(500).json({ error: 'Failed to send error report' })
+      }
+    })
+
     // Serve dashboard UI
     this.app.get('/', this.dashboardLimiter, (_req, res) => {
       const indexPath = path.join(__dirname, '../../public/index.html')
