@@ -1,5 +1,48 @@
 const crypto = require('crypto')
 
+/* ================= AUTH ================= */
+
+const MAX_CLOCK_SKEW = 30_000 // 30s tolerância
+
+function verifyAuthorization(auth) {
+    if (!auth || !auth.startsWith('Bearer ')) return false
+
+    let decoded
+    try {
+        decoded = Buffer.from(auth.slice(7), 'base64').toString()
+    } catch {
+        return false
+    }
+
+    const parts = decoded.split('.')
+    if (parts.length !== 3) return false
+
+    const [clientId, expStr, signature] = parts
+    const exp = Number(expStr)
+
+    if (!clientId || !exp || !signature) return false
+    if (Date.now() > exp + MAX_CLOCK_SKEW) return false
+
+    const master = process.env.AUTH_MASTER_SECRET
+    if (!master) return false
+
+    const expected = crypto
+        .createHmac('sha256', master)
+        .update(`${clientId}.${exp}`)
+        .digest('hex')
+
+    try {
+        return crypto.timingSafeEqual(
+            Buffer.from(expected),
+            Buffer.from(signature)
+        )
+    } catch {
+        return false
+    }
+}
+
+/* ================= RATE LIMIT ================= */
+
 const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 10
 const rateLimitMap = new Map()
@@ -99,15 +142,21 @@ function shouldReport(errorId) {
     return false
 }
 
-// ---- Handler ----
+/* ================= HANDLER ================= */
+
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
     if (req.method === 'OPTIONS') return res.end()
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' })
+    }
+
+    /* 🔐 AUTH CHECK (ANTES DE TUDO) */
+    if (!verifyAuthorization(req.headers.authorization)) {
+        return res.status(401).json({ error: 'Unauthorized' })
     }
 
     if (isRateLimited(getIP(req)) || globalRateLimit()) {
@@ -176,7 +225,6 @@ module.exports = async function handler(req, res) {
         })
 
         clearTimeout(timeout)
-
     } catch {
         webhookDownUntil = Date.now() + WEBHOOK_COOLDOWN_MS
     }
