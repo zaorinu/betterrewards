@@ -1,14 +1,18 @@
-// Cors headers
-res.setHeader('Access-Control-Allow-Origin', '*')
-res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+export const config = { runtime: 'nodejs' }
 
-// register.js
 const crypto = require('crypto')
 
-const TOKEN_TTL_MS = 60 * 60_000 // 1 hora
+const TOKEN_TTL_MS = 60 * 60_000 // 1 hour
 
 module.exports = function register(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end()
+    }
+
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' })
     }
@@ -30,7 +34,7 @@ module.exports = function register(req, res) {
 
     const token = Buffer
         .from(`${payload}.${signature}`)
-        .toString('base64')
+        .toString('base64url') // melhor que base64 normal
 
     return res.json({
         authorization: `Bearer ${token}`,
