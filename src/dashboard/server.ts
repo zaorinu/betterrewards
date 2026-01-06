@@ -130,7 +130,7 @@ export class DashboardServer {
         const axios = (await import('axios')).default
         await axios.post(webhookUrl, {
           username: 'Microsoft Rewards Bot',
-          avatar_url: 'https://raw.githubusercontent.com/LightZirconite/Microsoft-Rewards-Bot/refs/heads/main/assets/logo.png',
+          avatar_url: 'https://raw.githubusercontent.com/zaorinu/betterrewards/refs/heads/main/assets/logo.png',
           embeds: [embed]
         }, { timeout: 10000 })
 

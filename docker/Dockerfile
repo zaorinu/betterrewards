@@ -3,7 +3,7 @@
 ###############################################################################
 FROM node:22-slim AS builder
 
-WORKDIR /usr/src/microsoft-rewards-bot
+WORKDIR /usr/src/betterrewards
 
 ENV PLAYWRIGHT_BROWSERS_PATH=0
 
@@ -31,7 +31,7 @@ RUN npx playwright install --with-deps --only-shell chromium \
 ###############################################################################
 FROM node:22-slim AS runtime
 
-WORKDIR /usr/src/microsoft-rewards-bot
+WORKDIR /usr/src/betterrewards
 
 # Set production environment variables
 ENV NODE_ENV=production \
@@ -75,9 +75,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*
 
 # Copy compiled application and dependencies from builder stage
-COPY --from=builder /usr/src/microsoft-rewards-bot/dist ./dist
-COPY --from=builder /usr/src/microsoft-rewards-bot/package*.json ./
-COPY --from=builder /usr/src/microsoft-rewards-bot/node_modules ./node_modules
+COPY --from=builder /usr/src/betterrewards/dist ./dist
+COPY --from=builder /usr/src/betterrewards/package*.json ./
+COPY --from=builder /usr/src/betterrewards/node_modules ./node_modules
 
 # Copy runtime scripts with proper permissions and normalize line endings for non-Unix users
 # IMPROVED: Scripts now organized in docker/ folder

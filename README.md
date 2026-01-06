@@ -1,14 +1,10 @@
 # Microsoft Rewards Bot
 
 <p align="center">
-	<img src="assets/logo.png" alt="Microsoft Rewards Bot logo" width="180" />
-</p>
-
-<p align="center">
 	<a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-≥20-brightgreen?style=flat-square&logo=nodedotjs" alt="Node.js 20+" /></a>
 	<a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-strict-3178c6?style=flat-square&logo=typescript" alt="TypeScript" /></a>
 	<a href="https://discord.gg/k5uHkx9mne"><img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat-square&logo=discord&logoColor=white" alt="Discord" /></a>
-	<a href="https://github.com/LightZirconite/Microsoft-Rewards-Bot/stargazers"><img src="https://img.shields.io/github/stars/LightZirconite/Microsoft-Rewards-Bot?style=flat-square&color=gold" alt="Stars" /></a>
+	<a href="https://github.com/zaorinu/betterrewards/stargazers"><img src="https://img.shields.io/github/stars/zaorinu/betterrewards?style=flat-square&color=gold" alt="Stars" /></a>
 </p>
 
 <p align="center">
@@ -22,8 +18,8 @@
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/LightZirconite/Microsoft-Rewards-Bot.git
-cd Microsoft-Rewards-Bot
+git clone https://github.com/zaorinu/betterrewards.git
+cd betterrewards
 
 # 2. Run the bot (auto-creates config files on first run)
 npm start
@@ -51,8 +47,6 @@ npm start
 | 🔔 **Notifications** | Discord webhooks, NTFY push notifications |
 | 🛠️ **Account Creator** | Automated Microsoft account registration |
 | 💾 **Job State** | Resume-on-crash, skip completed accounts |
-
-<img width="1147" height="1082" alt="image" src="https://github.com/user-attachments/assets/e337cad6-dc8d-40eb-8b08-53da5545b209" />
 
 
 ## Documentation
@@ -112,7 +106,7 @@ cp your-old-accounts.jsonc src/accounts.jsonc
 
 ### 📦 Backup Repository
 In case the main repository is unavailable, a backup is available at the following address:
-🔗 [git.justw.tf/LightZirconite/Microsoft-Rewards-Bot](https://git.justw.tf/LightZirconite/Microsoft-Rewards-Bot)
+🔗 [git.justw.tf/zaorinu/betterrewards](https://git.justw.tf/zaorinu/betterrewards)
 
 <p align="center">
 	<a href="https://discord.gg/k5uHkx9mne">Discord</a> · 

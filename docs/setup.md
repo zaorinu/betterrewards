@@ -10,8 +10,8 @@ Get the bot ready before your first run.
 
 ```bash
 # Clone the repository
-git clone https://github.com/LightZirconite/Microsoft-Rewards-Bot.git
-cd Microsoft-Rewards-Bot
+git clone https://github.com/zaorinu/betterrewards.git
+cd betterrewards
 
 # Install dependencies (happens automatically on first run)
 npm install

@@ -274,7 +274,7 @@ async function downloadFromGitHub(url, dest) {
 
     httpsGet(url, {
       headers: {
-        'User-Agent': 'Microsoft-Rewards-Bot-Updater',
+        'User-Agent': 'betterrewards-Updater',
         'Cache-Control': 'no-cache'
       }
     }, (response) => {
@@ -319,7 +319,7 @@ async function smartUpdateExampleFiles(configData) {
       example: 'src/config.example.jsonc',
       target: 'src/config.jsonc',
       name: 'Configuration',
-      githubUrl: 'https://raw.githubusercontent.com/LightZirconite/Microsoft-Rewards-Bot/refs/heads/main/src/config.example.jsonc'
+      githubUrl: 'https://raw.githubusercontent.com/zaorinu/betterrewards/refs/heads/main/src/config.example.jsonc'
     })
   }
 
@@ -328,7 +328,7 @@ async function smartUpdateExampleFiles(configData) {
       example: 'src/accounts.example.jsonc',
       target: 'src/accounts.jsonc',
       name: 'Accounts',
-      githubUrl: 'https://raw.githubusercontent.com/LightZirconite/Microsoft-Rewards-Bot/refs/heads/main/src/accounts.example.jsonc'
+      githubUrl: 'https://raw.githubusercontent.com/zaorinu/betterrewards/refs/heads/main/src/accounts.example.jsonc'
     })
   }
 
@@ -404,8 +404,8 @@ try {
   const localVersion = localPkg.version
 
   // Fetch remote version from GitHub API (no cache)
-  const repoOwner = 'LightZirconite'
-  const repoName = 'Microsoft-Rewards-Bot'
+  const repoOwner = 'zaorinu'
+  const repoName = 'betterrewards'
   const branch = 'main'
 
   console.log('🔍 Checking for updates...')
@@ -417,7 +417,7 @@ try {
   return new Promise((resolve) => {
     const options = {
       headers: {
-        'User-Agent': 'Microsoft-Rewards-Bot-Updater',
+        'User-Agent': 'betterrewards-Updater',
         'Accept': 'application/vnd.github.v3.raw',  // Returns raw file content
         'Cache-Control': 'no-cache'
       }
@@ -571,8 +571,8 @@ async function performUpdate() {
 
   // Step 3: Download latest code from GitHub
   process.stdout.write('📥 Downloading...')
-  const repoOwner = 'LightZirconite'
-  const repoName = 'Microsoft-Rewards-Bot'
+  const repoOwner = 'zaorinu'
+  const repoName = 'betterrewards'
   const branch = 'main'
   const archiveUrl = `https://github.com/${repoOwner}/${repoName}/archive/refs/heads/${branch}.zip`
 

@@ -3,14 +3,14 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: microsoft-rewards-bot
+    container_name: betterrewards
     restart: unless-stopped
 
     # Volume mounts: Specify a location where you want to save the files on your local machine.
     volumes:
-      - ../src/accounts.jsonc:/usr/src/microsoft-rewards-bot/accounts.jsonc:ro
-      - ../src/config.jsonc:/usr/src/microsoft-rewards-bot/config.jsonc:ro
-      - ../sessions:/usr/src/microsoft-rewards-bot/sessions # Optional, saves your login session
+      - ../src/accounts.jsonc:/usr/src/betterrewards/accounts.jsonc:ro
+      - ../src/config.jsonc:/usr/src/betterrewards/config.jsonc:ro
+      - ../sessions:/usr/src/betterrewards/sessions # Optional, saves your login session
 
     environment:
       TZ: "America/Toronto" # Set your timezone for proper scheduling
