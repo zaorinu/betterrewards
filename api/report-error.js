@@ -4,6 +4,24 @@ const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 10
 const rateLimitMap = new Map()
 
+const ERROR_TTL_MS = 5 * 60_000
+const errorCache = new Map()
+
+// ---- Discord protection ----
+let webhookDownUntil = 0
+const WEBHOOK_COOLDOWN_MS = 60_000
+
+let globalCount = 0
+let globalReset = Date.now() + 60_000
+const GLOBAL_MAX = 30
+
+const LIMITS = {
+    title: 120,
+    desc: 1800,
+    field: 900
+}
+
+// ---- Utils ----
 function getIP(req) {
     return (
         req.headers['x-real-ip'] ||
@@ -22,8 +40,16 @@ function isRateLimited(ip) {
         return false
     }
 
-    if (++entry.count > RATE_LIMIT_MAX) return true
-    return false
+    return ++entry.count > RATE_LIMIT_MAX
+}
+
+function globalRateLimit() {
+    const now = Date.now()
+    if (now > globalReset) {
+        globalReset = now + 60_000
+        globalCount = 0
+    }
+    return ++globalCount > GLOBAL_MAX
 }
 
 function sanitize(text, max) {
@@ -35,6 +61,19 @@ function sanitize(text, max) {
         .slice(0, max)
 }
 
+function normalizeError(text) {
+    return text
+        .replace(/\b\d+\b/g, 'N')
+        .replace(/\/[^\s]+/g, '/path')
+        .replace(/[a-f0-9]{8,}/gi, 'hash')
+        .trim()
+}
+
+function isLowQualityError(msg) {
+    return ['error', 'failed', 'unknown', 'undefined']
+        .includes(msg.toLowerCase().trim())
+}
+
 function generateErrorId(error, stack = '') {
     return crypto
         .createHash('sha1')
@@ -44,6 +83,23 @@ function generateErrorId(error, stack = '') {
         .slice(0, 10)
 }
 
+function shouldReport(errorId) {
+    const now = Date.now()
+    const entry = errorCache.get(errorId)
+
+    if (!entry || entry.expires < now) {
+        errorCache.set(errorId, {
+            count: 1,
+            expires: now + ERROR_TTL_MS
+        })
+        return true
+    }
+
+    entry.count++
+    return false
+}
+
+// ---- Handler ----
 module.exports = async function handler(req, res) {
     res.setHeader('Access-Control-Allow-Origin', '*')
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
@@ -54,9 +110,12 @@ module.exports = async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' })
     }
 
-    const ip = getIP(req)
-    if (isRateLimited(ip)) {
+    if (isRateLimited(getIP(req)) || globalRateLimit()) {
         return res.status(429).json({ error: 'Rate limit exceeded' })
+    }
+
+    if (Date.now() < webhookDownUntil) {
+        return res.json({ success: false, dropped: 'webhook-down' })
     }
 
     const webhook = process.env.DISCORD_ERROR_WEBHOOK_URL
@@ -65,23 +124,32 @@ module.exports = async function handler(req, res) {
     }
 
     const { error, stack, context = {} } = req.body || {}
-    if (typeof error !== 'string') {
+    if (typeof error !== 'string' || error.length < 5) {
         return res.status(400).json({ error: 'Invalid payload' })
     }
 
-    const errorMsg = sanitize(error, 1900)
-    const stackMsg = sanitize(stack, 1000)
+    if (isLowQualityError(error)) {
+        return res.json({ success: false, dropped: 'low-quality' })
+    }
 
-    const errorId = generateErrorId(errorMsg, stackMsg)
+    const errorMsg = sanitize(error, LIMITS.desc)
+    const stackMsg = sanitize(stack, LIMITS.field)
+
+    const normalized = normalizeError(errorMsg)
+    const errorId = generateErrorId(normalized, stackMsg)
+
+    if (!shouldReport(errorId)) {
+        return res.json({ success: true, errorId, deduplicated: true })
+    }
 
     const embed = {
-        title: `🔴 Bot Error • ${errorId}`,
+        title: `🔴 Bot Error • ${errorId}`.slice(0, LIMITS.title),
         description: `\`\`\`\n${errorMsg}\n\`\`\``,
         color: 0xdc143c,
         fields: [
             { name: 'Error ID', value: `\`${errorId}\``, inline: true },
-            { name: 'Version', value: sanitize(context.version, 50) || 'unknown', inline: true },
-            { name: 'Platform', value: sanitize(context.platform, 50) || 'unknown', inline: true }
+            { name: 'Platform', value: sanitize(context.platform, 50) || 'unknown', inline: true },
+            { name: 'Version', value: sanitize(context.version, 50) || 'unknown', inline: true }
         ],
         timestamp: new Date().toISOString()
     }
@@ -93,20 +161,25 @@ module.exports = async function handler(req, res) {
         })
     }
 
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
+    try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 2500)
 
-    await fetch(webhook, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            username: 'Microsoft Rewards Bot',
-            embeds: [embed]
-        }),
-        signal: controller.signal
-    })
+        await fetch(webhook, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                username: 'Microsoft Rewards Bot',
+                embeds: [embed]
+            }),
+            signal: controller.signal
+        })
 
-    clearTimeout(timeout)
+        clearTimeout(timeout)
+
+    } catch {
+        webhookDownUntil = Date.now() + WEBHOOK_COOLDOWN_MS
+    }
 
     return res.json({ success: true, errorId })
 }
