@@ -141,7 +141,6 @@ function generateErrorId(error) {
     return crypto
         .createHash('sha1')
         .update(error)
-        .update(stack)
         .digest('hex')
         .slice(0, 10)
 }
