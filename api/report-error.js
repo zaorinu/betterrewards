@@ -8,28 +8,21 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
-async function registerError(errorId, normalized) {
-    const { data, error } = await supabase
+async function isFirstError(errorId, normalized) {
+    const { error } = await supabase
         .from('error_events')
-        .upsert({
+        .insert({
             error_id: errorId,
-            normalized_error: normalized,
-            last_seen: new Date().toISOString()
-        }, { onConflict: 'error_id' })
-        .select('count')
-        .single()
-
-    if (error) throw error
-
-    await supabase
-        .from('error_events')
-        .update({
-            count: data.count + 1,
-            last_seen: new Date().toISOString()
+            normalized_error: normalized
         })
-        .eq('error_id', errorId)
 
-    return data.count + 1
+    // error already exists
+    if (error) {
+        if (error.code === '23505') return false
+        throw error
+    }
+
+    return true
 }
 
 /* ================= AUTH ================= */
@@ -38,10 +31,13 @@ const MAX_CLOCK_SKEW = 30_000
 
 function verifyAuthorization(auth) {
     if (!auth || !auth.startsWith('Bearer ')) return false
+
     let decoded
     try {
         decoded = Buffer.from(auth.slice(7), 'base64').toString()
-    } catch { return false }
+    } catch {
+        return false
+    }
 
     const [clientId, expStr, signature] = decoded.split('.')
     const exp = Number(expStr)
@@ -59,7 +55,9 @@ function verifyAuthorization(auth) {
             Buffer.from(expected),
             Buffer.from(signature)
         )
-    } catch { return false }
+    } catch {
+        return false
+    }
 }
 
 /* ================= RATE LIMIT ================= */
@@ -68,31 +66,28 @@ const RATE_LIMIT_WINDOW_MS = 60_000
 const RATE_LIMIT_MAX = 10
 const rateLimitMap = new Map()
 
-const ERROR_TTL_MS = 5 * 60_000
-const errorCache = new Map()
-
-let webhookDownUntil = 0
-const WEBHOOK_COOLDOWN_MS = 60_000
-
 let globalCount = 0
 let globalReset = Date.now() + 60_000
 const GLOBAL_MAX = 30
 
-/* ================= UTILS ================= */
-
 function getIP(req) {
-    return req.headers['x-forwarded-for']?.split(',')[0]
-        || req.socket?.remoteAddress
-        || 'unknown'
+    return (
+        req.headers['x-real-ip'] ||
+        req.headers['x-forwarded-for']?.split(',')[0] ||
+        req.socket?.remoteAddress ||
+        'unknown'
+    )
 }
 
 function isRateLimited(ip) {
     const now = Date.now()
     const entry = rateLimitMap.get(ip)
+
     if (!entry || entry.reset < now) {
         rateLimitMap.set(ip, { count: 1, reset: now + RATE_LIMIT_WINDOW_MS })
         return false
     }
+
     return ++entry.count > RATE_LIMIT_MAX
 }
 
@@ -105,9 +100,28 @@ function globalRateLimit() {
     return ++globalCount > GLOBAL_MAX
 }
 
+/* ================= UTILS ================= */
+
+const LIMITS = {
+    title: 120,
+    desc: 1800,
+    field: 900
+}
+
+function sanitize(text, max) {
+    if (!text) return ''
+    return String(text)
+        .replace(/@(everyone|here)/gi, '@\u200b$1')
+        .replace(/<@[!&]?\d+>/g, '@user')
+        .replace(/<#\d+>/g, '#channel')
+        .slice(0, max)
+}
+
 function normalizeError(text) {
     return text
         .replace(/\[[^\]]+]/g, '')
+        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'user')
+        .replace(/\b[a-z0-9]{1,3}\*+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, 'user')
         .replace(/\b\d+\b/g, 'N')
         .replace(/[a-f0-9]{8,}/gi, 'hash')
         .replace(/\s+/g, ' ')
@@ -115,23 +129,22 @@ function normalizeError(text) {
         .toLowerCase()
 }
 
-function generateErrorId(text) {
-    return crypto.createHash('sha1').update(text).digest('hex').slice(0, 10)
-}
-
-function shouldReport(errorId) {
-    const now = Date.now()
-    const entry = errorCache.get(errorId)
-    if (!entry || entry.expires < now) {
-        errorCache.set(errorId, { expires: now + ERROR_TTL_MS })
-        return true
-    }
-    return false
+function generateErrorId(normalized) {
+    return crypto
+        .createHash('sha1')
+        .update(normalized)
+        .digest('hex')
+        .slice(0, 10)
 }
 
 /* ================= HANDLER ================= */
 
 module.exports = async function handler(req, res) {
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+    if (req.method === 'OPTIONS') return res.end()
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' })
     }
@@ -144,40 +157,64 @@ module.exports = async function handler(req, res) {
         return res.status(429).json({ error: 'Rate limit exceeded' })
     }
 
-    if (Date.now() < webhookDownUntil) {
-        return res.json({ success: false, dropped: 'webhook-down' })
+    const webhook = process.env.DISCORD_ERROR_WEBHOOK_URL
+    if (!webhook) {
+        return res.status(503).json({ error: 'Webhook not configured' })
     }
 
-    const { error } = req.body || {}
+    const { error, stack, context = {} } = req.body || {}
     if (typeof error !== 'string' || error.length < 5) {
         return res.status(400).json({ error: 'Invalid payload' })
     }
 
-    const normalized = normalizeError(error)
+    const errorMsg = sanitize(error, LIMITS.desc)
+    const stackMsg = sanitize(stack, LIMITS.field)
+
+    const normalized = normalizeError(errorMsg)
     const errorId = generateErrorId(normalized)
 
-    let count = 1
+    let firstOccurrence = false
     try {
-        count = await registerError(errorId, normalized)
+        firstOccurrence = await isFirstError(errorId, normalized)
     } catch (e) {
         console.error('Supabase error:', e)
     }
 
-    if (!shouldReport(errorId)) {
-        return res.json({ success: true, errorId, deduplicated: true, count })
+    // ⛔ erro já conhecido → não envia webhook
+    if (!firstOccurrence) {
+        return res.json({ success: true, errorId, deduplicated: true })
     }
 
-    try {
-        await fetch(process.env.DISCORD_ERROR_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: `🔴 **Error ${errorId}**\nOcorrências: **${count}**\n\`\`\`${error}\`\`\``
-            })
+    /* ===== WEBHOOK (aparência ANTIGA) ===== */
+
+    const embed = {
+        title: `🔴 Error Report • ${errorId}`.slice(0, LIMITS.title),
+        description: `\`\`\`\n${errorMsg}\n\`\`\``,
+        color: 0xdc143c,
+        fields: [
+            { name: 'Error ID', value: `\`${errorId}\``, inline: true },
+            { name: 'Platform', value: sanitize(context.platform, 50) || 'unknown', inline: true },
+            { name: 'Version', value: sanitize(context.version, 50) || 'unknown', inline: true }
+        ],
+        timestamp: new Date().toISOString()
+    }
+
+    if (stackMsg) {
+        embed.fields.push({
+            name: 'Stack Trace',
+            value: `\`\`\`\n${stackMsg}\n\`\`\``
         })
-    } catch {
-        webhookDownUntil = Date.now() + WEBHOOK_COOLDOWN_MS
     }
 
-    return res.json({ success: true, errorId, count })
+    await fetch(webhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            username: 'Microsoft Rewards Bot',
+            content: `-# ${errorId}`,
+            embeds: [embed]
+        })
+    })
+
+    return res.json({ success: true, errorId })
 }
