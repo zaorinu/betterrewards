@@ -1,33 +1,56 @@
 const crypto = require('crypto')
+const { createClient } = require('@supabase/supabase-js')
+
+/* ================= SUPABASE ================= */
+
+const supabase = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+)
+
+async function registerError(errorId, normalized) {
+    const { data, error } = await supabase
+        .from('error_events')
+        .upsert({
+            error_id: errorId,
+            normalized_error: normalized,
+            last_seen: new Date().toISOString()
+        }, { onConflict: 'error_id' })
+        .select('count')
+        .single()
+
+    if (error) throw error
+
+    await supabase
+        .from('error_events')
+        .update({
+            count: data.count + 1,
+            last_seen: new Date().toISOString()
+        })
+        .eq('error_id', errorId)
+
+    return data.count + 1
+}
 
 /* ================= AUTH ================= */
 
-const MAX_CLOCK_SKEW = 30_000 // 30s tolerância
+const MAX_CLOCK_SKEW = 30_000
 
 function verifyAuthorization(auth) {
     if (!auth || !auth.startsWith('Bearer ')) return false
-
     let decoded
     try {
         decoded = Buffer.from(auth.slice(7), 'base64').toString()
-    } catch {
-        return false
-    }
+    } catch { return false }
 
-    const parts = decoded.split('.')
-    if (parts.length !== 3) return false
-
-    const [clientId, expStr, signature] = parts
+    const [clientId, expStr, signature] = decoded.split('.')
     const exp = Number(expStr)
 
     if (!clientId || !exp || !signature) return false
     if (Date.now() > exp + MAX_CLOCK_SKEW) return false
 
-    const master = process.env.AUTH_MASTER_SECRET
-    if (!master) return false
-
     const expected = crypto
-        .createHmac('sha256', master)
+        .createHmac('sha256', process.env.AUTH_MASTER_SECRET)
         .update(`${clientId}.${exp}`)
         .digest('hex')
 
@@ -36,9 +59,7 @@ function verifyAuthorization(auth) {
             Buffer.from(expected),
             Buffer.from(signature)
         )
-    } catch {
-        return false
-    }
+    } catch { return false }
 }
 
 /* ================= RATE LIMIT ================= */
@@ -50,7 +71,6 @@ const rateLimitMap = new Map()
 const ERROR_TTL_MS = 5 * 60_000
 const errorCache = new Map()
 
-// ---- Discord protection ----
 let webhookDownUntil = 0
 const WEBHOOK_COOLDOWN_MS = 60_000
 
@@ -58,31 +78,21 @@ let globalCount = 0
 let globalReset = Date.now() + 60_000
 const GLOBAL_MAX = 30
 
-const LIMITS = {
-    title: 120,
-    desc: 1800,
-    field: 900
-}
+/* ================= UTILS ================= */
 
-// ---- Utils ----
 function getIP(req) {
-    return (
-        req.headers['x-real-ip'] ||
-        req.headers['x-forwarded-for']?.split(',')[0] ||
-        req.socket?.remoteAddress ||
-        'unknown'
-    )
+    return req.headers['x-forwarded-for']?.split(',')[0]
+        || req.socket?.remoteAddress
+        || 'unknown'
 }
 
 function isRateLimited(ip) {
     const now = Date.now()
     const entry = rateLimitMap.get(ip)
-
     if (!entry || entry.reset < now) {
         rateLimitMap.set(ip, { count: 1, reset: now + RATE_LIMIT_WINDOW_MS })
         return false
     }
-
     return ++entry.count > RATE_LIMIT_MAX
 }
 
@@ -95,88 +105,37 @@ function globalRateLimit() {
     return ++globalCount > GLOBAL_MAX
 }
 
-function sanitize(text, max) {
-    if (!text) return ''
-    return String(text)
-        .replace(/@(everyone|here)/gi, '@\u200b$1')
-        .replace(/<@[!&]?\d+>/g, '@user')
-        .replace(/<#\d+>/g, '#channel')
-        .slice(0, max)
-}
-
 function normalizeError(text) {
     return text
-        // Remove ALL [metadata] blocks anywhere
         .replace(/\[[^\]]+]/g, '')
-
-        // Remove emails / usernames
-        .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'user')
-
-        // Normalize masked usernames
-        .replace(/\b[a-z0-9]{1,3}\*+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, 'user')
-
-        // Normalize retry counters
-        .replace(/after\s+\d+\s+retries?/gi, 'after retries')
-        .replace(/\(\d+\s+retries?\)/gi, '(retries)')
-
-        // Normalize numbers
         .replace(/\b\d+\b/g, 'N')
-
-        // Normalize URLs / paths
-        .replace(/https?:\/\/\S+/gi, 'url')
-        .replace(/\/[^\s]+/g, '/path')
-
-        // Normalize hashes / tokens
         .replace(/[a-f0-9]{8,}/gi, 'hash')
-
-        // Collapse whitespace
         .replace(/\s+/g, ' ')
         .trim()
         .toLowerCase()
 }
 
-function isLowQualityError(msg) {
-    return ['error', 'failed', 'unknown', 'undefined']
-        .includes(msg.toLowerCase().trim())
-}
-
-function generateErrorId(error) {
-    return crypto
-        .createHash('sha1')
-        .update(error)
-        .digest('hex')
-        .slice(0, 10)
+function generateErrorId(text) {
+    return crypto.createHash('sha1').update(text).digest('hex').slice(0, 10)
 }
 
 function shouldReport(errorId) {
     const now = Date.now()
     const entry = errorCache.get(errorId)
-
     if (!entry || entry.expires < now) {
-        errorCache.set(errorId, {
-            count: 1,
-            expires: now + ERROR_TTL_MS
-        })
+        errorCache.set(errorId, { expires: now + ERROR_TTL_MS })
         return true
     }
-
-    entry.count++
     return false
 }
 
 /* ================= HANDLER ================= */
 
 module.exports = async function handler(req, res) {
-    res.setHeader('Access-Control-Allow-Origin', '*')
-    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-
-    if (req.method === 'OPTIONS') return res.end()
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' })
     }
 
-    /* Check Authorization header */
     if (!verifyAuthorization(req.headers.authorization)) {
         return res.status(401).json({ error: 'Unauthorized' })
     }
@@ -189,71 +148,36 @@ module.exports = async function handler(req, res) {
         return res.json({ success: false, dropped: 'webhook-down' })
     }
 
-    const webhook = process.env.DISCORD_ERROR_WEBHOOK_URL
-    if (!webhook) {
-        return res.status(503).json({ error: 'Webhook not configured' })
-    }
-
-    const { error, stack, context = {} } = req.body || {}
+    const { error } = req.body || {}
     if (typeof error !== 'string' || error.length < 5) {
         return res.status(400).json({ error: 'Invalid payload' })
     }
 
-    if (isLowQualityError(error)) {
-        return res.json({ success: false, dropped: 'low-quality' })
-    }
-
-    const errorMsg = sanitize(error, LIMITS.desc)
-    const stackMsg = sanitize(stack, LIMITS.field)
-
-    const normalized = normalizeError(errorMsg)
+    const normalized = normalizeError(error)
     const errorId = generateErrorId(normalized)
 
+    let count = 1
+    try {
+        count = await registerError(errorId, normalized)
+    } catch (e) {
+        console.error('Supabase error:', e)
+    }
+
     if (!shouldReport(errorId)) {
-        return res.json({ success: true, errorId, deduplicated: true })
-    }
-
-    const embed = {
-        title: `🔴 Error Report • ${errorId}`.slice(0, LIMITS.title),
-        description: `\`\`\`\n${errorMsg}\n\`\`\``,
-        color: 0xdc143c,
-        fields: [
-            { name: 'Error ID', value: `\`${errorId}\``, inline: true },
-            { name: 'Platform', value: sanitize(context.platform, 50) || 'unknown', inline: true },
-            { name: 'Version', value: sanitize(context.version, 50) || 'unknown', inline: true }
-        ],
-        timestamp: new Date().toISOString()
-    }
-
-    if (stackMsg) {
-        embed.fields.push({
-            name: 'Stack Trace',
-            value: `\`\`\`\n${stackMsg}\n\`\`\``
-        })
+        return res.json({ success: true, errorId, deduplicated: true, count })
     }
 
     try {
-        const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 2500)
-
-        await fetch(webhook, {
+        await fetch(process.env.DISCORD_ERROR_WEBHOOK_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                username: 'Microsoft Rewards Bot',
-                
-                // Searchable error id outside embed
-                content: `-# ${errorId}`,
-
-                embeds: [embed]
-            }),
-            signal: controller.signal
+                content: `🔴 **Error ${errorId}**\nOcorrências: **${count}**\n\`\`\`${error}\`\`\``
+            })
         })
-
-        clearTimeout(timeout)
     } catch {
         webhookDownUntil = Date.now() + WEBHOOK_COOLDOWN_MS
     }
 
-    return res.json({ success: true, errorId })
+    return res.json({ success: true, errorId, count })
 }
