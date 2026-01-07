@@ -179,7 +179,7 @@ module.exports = async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' })
     }
 
-    /* 🔐 AUTH CHECK (ANTES DE TUDO) */
+    /* Check Authorization header */
     if (!verifyAuthorization(req.headers.authorization)) {
         return res.status(401).json({ error: 'Unauthorized' })
     }
@@ -244,6 +244,10 @@ module.exports = async function handler(req, res) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 username: 'Microsoft Rewards Bot',
+                
+                // Searchable error id outside embed
+                content: `-# ${errorId}`,
+
                 embeds: [embed]
             }),
             signal: controller.signal
