@@ -112,6 +112,9 @@ function normalizeError(text) {
         // Remove emails / usernames
         .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'user')
 
+        // Normalize masked usernames
+        .replace(/\b[a-z0-9]{1,3}\*+@[a-z0-9.-]+\.[a-z]{2,}\b/gi, 'user')
+
         // Normalize retry counters
         .replace(/after\s+\d+\s+retries?/gi, 'after retries')
         .replace(/\(\d+\s+retries?\)/gi, '(retries)')
