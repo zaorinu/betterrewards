@@ -106,13 +106,8 @@ function sanitize(text, max) {
 
 function normalizeError(text) {
     return text
-        // Remove log prefixes: [06/01/2026, 18:37:53] [PID: 123]
-        .replace(/^\[[^\]]+]\s*/g, '')
-        .replace(/\[PID:\s*\d+]/gi, '')
-
-        // Remove common log tags
-        .replace(/\[(ERROR|WARN|INFO|DEBUG)]/gi, '')
-        .replace(/\[(TASK|LOGIN-APP|MOBILE|DESKTOP|WORKER|API)]/gi, '')
+        // Remove ALL [metadata] blocks anywhere
+        .replace(/\[[^\]]+]/g, '')
 
         // Remove emails / usernames
         .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, 'user')
@@ -121,10 +116,10 @@ function normalizeError(text) {
         .replace(/after\s+\d+\s+retries?/gi, 'after retries')
         .replace(/\(\d+\s+retries?\)/gi, '(retries)')
 
-        // Normalize numbers (but keep small semantic words)
+        // Normalize numbers
         .replace(/\b\d+\b/g, 'N')
 
-        // Normalize paths / URLs
+        // Normalize URLs / paths
         .replace(/https?:\/\/\S+/gi, 'url')
         .replace(/\/[^\s]+/g, '/path')
 
@@ -217,7 +212,7 @@ module.exports = async function handler(req, res) {
     }
 
     const embed = {
-        title: `🔴 Bot Error • ${errorId}`.slice(0, LIMITS.title),
+        title: `🔴 Error Report • ${errorId}`.slice(0, LIMITS.title),
         description: `\`\`\`\n${errorMsg}\n\`\`\``,
         color: 0xdc143c,
         fields: [
