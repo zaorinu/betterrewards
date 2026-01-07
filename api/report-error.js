@@ -137,7 +137,7 @@ function isLowQualityError(msg) {
         .includes(msg.toLowerCase().trim())
 }
 
-function generateErrorId(error, stack = '') {
+function generateErrorId(error) {
     return crypto
         .createHash('sha1')
         .update(error)
@@ -205,7 +205,7 @@ module.exports = async function handler(req, res) {
     const stackMsg = sanitize(stack, LIMITS.field)
 
     const normalized = normalizeError(errorMsg)
-    const errorId = generateErrorId(normalized, stackMsg)
+    const errorId = generateErrorId(normalized)
 
     if (!shouldReport(errorId)) {
         return res.json({ success: true, errorId, deduplicated: true })
