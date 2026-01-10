@@ -259,8 +259,7 @@ export class MicrosoftRewardsBot {
         const shouldStartUi = forceUi || (isInteractive && !disableUi)
         if (shouldStartUi) {
             const ver = this.getVersion()
-            const acct: string | undefined = undefined // Will be updated dynamically from logs
-            try { SimpleUI.startUI({ versionStr: `v${ver}`, account: acct, config: this.config, getCurrentAccount: () => this.getCurrentFarmingEmail() }) } catch { /* ignore UI errors */ }
+           try { SimpleUI.startUI({ versionStr: `v${ver}`, accounts: loadAccounts().map(a => a.email), config: this.config }) } catch { /* ignore UI errors */ }
         } else {
             this.printBanner()
         }
@@ -1065,8 +1064,7 @@ async function main(): Promise<void> {
         const shouldStartUi = forceUi || (isInteractive && !disableUi)
         if (shouldStartUi) {
             const ver = rewardsBot.getVersion()
-            const acct: string | undefined = undefined // Will be updated dynamically from logs
-            SimpleUI.startUI({ versionStr: `v${ver}`, account: acct, config: rewardsBot.config, getCurrentAccount: () => rewardsBot.getCurrentFarmingEmail() })
+            SimpleUI.startUI({ versionStr: `v${ver}`, accounts: loadAccounts().map(a => a.email), config: rewardsBot.config })
         }
     } catch { /* non-critical */ }
 
