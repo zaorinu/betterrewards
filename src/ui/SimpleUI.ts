@@ -13,6 +13,7 @@ let uiActive = false
 let startTime = Date.now()
 let version = 'v?' 
 let accountDisplay: string | undefined = undefined
+let getCurrentAccount: (() => string | undefined) | undefined = undefined
 let config: any = null
 let errorIDs: string[] = []
 
@@ -71,8 +72,13 @@ function formatMainScreen(): string {
 
     const elapsed = formatElapsed(Date.now() - startTime)
 
-    const accountText = partialAccount(accountDisplay)
-    const statusLine = accountText ? `  Farming points on account ${accountText}` : '  Loading profiles...'
+    let statusLine: string
+    if (accountDisplay === undefined) {
+        statusLine = '  Loading profiles...'
+    } else {
+        const accountText = partialAccount(accountDisplay)
+        statusLine = `  Farming points on account ${accountText}`
+    }
 
     const banner = [
         ' ',
@@ -146,15 +152,6 @@ function onLog(e: LogEntry) {
     logs.push(line)
     if (logs.length > 500) logs.shift()
 
-    // Detect current processing account
-    if (e.title === 'MAIN-WORKER' && e.message.startsWith('Started tasks for account')) {
-        const email = e.message.replace('Started tasks for account ', '').trim()
-        if (email && !accountDisplay) {
-            accountDisplay = email
-            // Draw will be called by interval
-        }
-    }
-
     // Error reporting for SimpleUI
     if (e.level === 'error' && config) {
         const errorObj = new Error(line)
@@ -174,13 +171,19 @@ function onLog(e: LogEntry) {
     }
 }
 
-export function startUI(opts: { versionStr?: string; account?: string | undefined; config?: any } = {}) {
-    if (uiActive) return
+export function startUI(opts: { versionStr?: string; account?: string | undefined; config?: any; getCurrentAccount?: () => string | undefined } = {}) {
+    if (uiActive) {
+        // UI já ativo, só atualizar config e getCurrentAccount se fornecidos
+        if (opts.config) config = opts.config
+        if (opts.getCurrentAccount) getCurrentAccount = opts.getCurrentAccount
+        return
+    }
     uiActive = true
     startTime = Date.now()
     if (opts.versionStr) version = opts.versionStr
     // Do not set accountDisplay here to avoid overwriting detected accounts
     if (opts.config) config = opts.config
+    if (opts.getCurrentAccount) getCurrentAccount = opts.getCurrentAccount
 
     // Enter alternate screen and hide cursor to avoid polluting scrollback
     try { process.stdout.write('\x1B[?1049h') } catch { }
@@ -191,7 +194,13 @@ export function startUI(opts: { versionStr?: string; account?: string | undefine
 
     // Start periodic draw for clock updates
     interval = setInterval(() => {
-        if (uiActive) draw()
+        if (uiActive) {
+            const newAccount = getCurrentAccount ? getCurrentAccount() : undefined
+            if (newAccount && !accountDisplay) {
+                accountDisplay = newAccount
+            }
+            draw()
+        }
     }, 1000) // Update every second
 
     // Initial draw
@@ -261,12 +270,6 @@ export function startUI(opts: { versionStr?: string; account?: string | undefine
             }
         })
     }
-
-    // Initial draw and interval
-    draw()
-    interval = setInterval(() => {
-        draw()
-    }, 1000)
 }
 
 export function stopUI() {

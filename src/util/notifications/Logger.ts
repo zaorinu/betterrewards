@@ -230,7 +230,7 @@ export function log(isMobile: boolean | 'main', title: string, message: string, 
     type LoggingCfg = { excludeFunc?: string[]; webhookExcludeFunc?: string[]; redactEmails?: boolean; consoleEnabled?: boolean }
     const loggingCfg: LoggingCfg = logging || {}
     const shouldRedact = !!loggingCfg.redactEmails
-    const consoleEnabled = loggingCfg.consoleEnabled !== false // Default true
+    const consoleEnabled = loggingCfg.consoleEnabled ?? false
 
     const redactSensitive = (s: string) => {
         const scrubbed = s
