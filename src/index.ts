@@ -32,6 +32,7 @@ import { SummaryReporter, type AccountResult } from './flows/SummaryReporter'
 import { InternalScheduler } from './scheduler/InternalScheduler'
 
 import { DISCORD, TIMEOUTS } from './constants'
+import SimpleUI from './ui/SimpleUI'
 import { Account } from './interface/Account'
 import { FileBootstrap } from './util/core/FileBootstrap'
 
@@ -238,7 +239,19 @@ export class MicrosoftRewardsBot {
     }
 
     async run() {
-        this.printBanner()
+        // Start simple TUI in interactive terminals
+        const uiEnv = process.env.REWARDS_UI
+        const forceUi = uiEnv === '1'
+        const disableUi = uiEnv === '0'
+        const isInteractive = !!process.stdin.isTTY && process.env.CI !== 'true' && process.env.DOCKER !== 'true' && process.env.SCHEDULED_TASK !== 'true'
+        const shouldStartUi = forceUi || (isInteractive && !disableUi)
+        if (shouldStartUi) {
+            const ver = this.getVersion()
+            const acct = this.currentAccountEmail ?? (this.accounts[0]?.email ?? '***hidden***')
+            try { SimpleUI.startUI({ versionStr: `v${ver}`, account: acct }) } catch { /* ignore UI errors */ }
+        } else {
+            this.printBanner()
+        }
         log('main', 'MAIN', `Bot started with ${this.config.clusters} worker(s) (1 bot, ${this.config.clusters} parallel browser${this.config.clusters > 1 ? 's' : ''})`)
 
         // Only cluster when there's more than 1 cluster demanded
@@ -298,7 +311,7 @@ export class MicrosoftRewardsBot {
         console.log('')
     }
 
-    private getVersion(): string {
+    public getVersion(): string {
         const DEFAULT_VERSION = '2.56.0'
         try {
             const pkgPath = path.join(__dirname, '../', 'package.json')
@@ -1030,6 +1043,20 @@ async function main(): Promise<void> {
     }
 
     const rewardsBot = new MicrosoftRewardsBot(false)
+
+    // Start simple UI early so it can capture bootstrap logs.
+    try {
+        const uiEnv = process.env.REWARDS_UI
+        const forceUi = uiEnv === '1'
+        const disableUi = uiEnv === '0'
+        const isInteractive = !!process.stdin.isTTY && process.env.CI !== 'true' && process.env.DOCKER !== 'true' && process.env.SCHEDULED_TASK !== 'true'
+        const shouldStartUi = forceUi || (isInteractive && !disableUi)
+        if (shouldStartUi) {
+            const ver = rewardsBot.getVersion()
+            const acct = rewardsBot.currentAccountEmail ?? (rewardsBot.getSummaries()?.[0]?.email ?? '***hidden***')
+            SimpleUI.startUI({ versionStr: `v${ver}`, account: acct })
+        }
+    } catch { /* non-critical */ }
 
     const crashState = { restarts: 0 }
     const config = rewardsBot.config

@@ -21,7 +21,7 @@
 git clone https://github.com/zaorinu/betterrewards.git
 cd betterrewards
 
-# 2. Run the bot (auto-creates config files on first run)
+# 2. Run the bot (interactive runs will show the "Easy UI" by default)
 npm start
 
 # 3. Configure your accounts
@@ -32,6 +32,15 @@ npm start
 ```
 
 **Note:** Configuration files (`config.jsonc` and `accounts.jsonc`) are automatically created from `.example.jsonc` templates on first run.
+
+Easy UI controls (interactive terminals):
+- L : Toggle the main banner
+- Up/Down, PageUp/PageDown : Scroll logs
+- Q : Close the Easy UI (logs continue on STDOUT)
+
+Environment variables:
+- `REWARDS_UI=1` — force Easy UI even in non-interactive runs
+- `REWARDS_UI=0` — disable Easy UI even in interactive runs
 
 ## Features
 
