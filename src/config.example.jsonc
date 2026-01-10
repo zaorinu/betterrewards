@@ -3,6 +3,7 @@
     "baseURL": "https://rewards.bing.com",
     "sessionPath": "sessions",
     "dryRun": false,
+    "skipValidation": false, // Skip startup validation (not recommended)
     // === EXECUTION ===
     "execution": {
         "parallel": false, // Run multiple accounts in parallel (advanced)
@@ -112,10 +113,14 @@
     },
     // === LOGGING ===
     "logging": {
+        "consoleEnabled": false, // Enable/disable console logging (set to false to hide logs)
         "excludeFunc": [
             "SEARCH-CLOSE-TABS", // Exclude verbose search tab cleanup logs
             "LOGIN-NO-PROMPT", // Exclude "no prompt found" login logs
-            "FLOW" // Exclude flow orchestration logs
+            "FLOW", // Exclude flow orchestration logs
+            "SEARCH-BING", // Exclude search start/end logs
+            "POINTS", // Exclude points update logs
+            "ACTIVITY" // Exclude activity logs
         ],
         "webhookExcludeFunc": [
             "SEARCH-CLOSE-TABS",

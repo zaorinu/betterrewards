@@ -26,6 +26,7 @@ export interface Config {
     crashRecovery?: ConfigCrashRecovery; // Automatic restart / graceful shutdown
     riskManagement?: ConfigRiskManagement; // Risk-aware throttling and ban prediction
     dryRun?: boolean; // Dry-run mode (simulate without executing)
+    skipValidation?: boolean; // Skip startup validation (not recommended)
     queryDiversity?: ConfigQueryDiversity; // Multi-source query generation
     dashboard?: ConfigDashboard; // Local web dashboard for monitoring and control
     scheduling?: ConfigScheduling; // Automatic scheduler configuration (cron/Task Scheduler)
@@ -158,6 +159,7 @@ export interface ConfigLogging {
     live?: ConfigLoggingLive;
     liveWebhookUrl?: string; // legacy/dedicated live webhook override
     redactEmails?: boolean; // legacy top-level redaction flag
+    consoleEnabled?: boolean; // enable/disable console logging
     // Optional nested live.url support (already handled dynamically in Logger)
     [key: string]: unknown; // forward compatibility
 }

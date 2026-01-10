@@ -6,6 +6,7 @@
 const state = {
     isRunning: false,
     autoScroll: true,
+    logsVisible: true,
     logs: [],
     accounts: [],
     stats: { totalAccounts: 0, totalPoints: 0, completed: 0, errors: 0, startTime: null },
@@ -837,17 +838,17 @@ function closeModal() {
 }
 
 // Theme
-function toggleTheme() {
-    document.body.classList.toggle('light-theme')
-    var isLight = document.body.classList.contains('light-theme')
-    try {
-        localStorage.setItem('theme', isLight ? 'light' : 'dark')
-    } catch (e) { }
-
-    var btn = document.querySelector('.theme-toggle i')
-    if (btn) btn.className = isLight ? 'fas fa-sun' : 'fas fa-moon'
-
-    updateChartsTheme(isLight)
+function toggleLogs() {
+    state.logsVisible = !state.logsVisible
+    const logsContainer = document.getElementById('logsContainer')
+    if (logsContainer) {
+        logsContainer.style.display = state.logsVisible ? 'block' : 'none'
+    }
+    const btn = document.querySelector('.logs-toggle')
+    if (btn) {
+        btn.title = state.logsVisible ? 'Hide logs' : 'Show logs'
+        // Talvez mudar ícone
+    }
 }
 
 function loadTheme() {
@@ -916,6 +917,18 @@ function escapeHtml(text) {
 }
 
 // Event listeners
+function toggleLogs() {
+    state.logsVisible = !state.logsVisible
+    const logsContainer = document.getElementById('logsContainer')
+    if (logsContainer) {
+        logsContainer.style.display = state.logsVisible ? 'block' : 'none'
+    }
+    const btn = document.querySelector('.logs-toggle')
+    if (btn) {
+        btn.title = state.logsVisible ? 'Hide logs' : 'Show logs'
+    }
+}
+
 document.addEventListener('click', (e) => {
     if (e.target.classList.contains('modal')) closeModal()
 })

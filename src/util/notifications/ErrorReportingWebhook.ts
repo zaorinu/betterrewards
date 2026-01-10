@@ -14,6 +14,7 @@ const ERROR_REPORTING_HARD_DISABLED = false
 let cachedAuthorization: string | null = null
 let authExpiresAt = 0
 let registerInFlight: Promise<void> | null = null
+let cachedProjectVersion: string | null = null
 
 interface ErrorReportPayload {
     error: string
@@ -98,7 +99,11 @@ function shouldReportError(errorMessage: string): boolean {
         /account.*locked/i,
         /timeout.*exceeded/i,
         /net::ERR_/i,
-        /already.*completed/i
+        /already.*completed/i,
+        /navigation.*timeout/i,
+        /element.*not.*found/i,
+        /page.*crashed/i,
+        /browser.*closed/i
     ]
 
     return !ignoredPatterns.some(p => p.test(lower))
@@ -160,13 +165,13 @@ export async function sendErrorReport(
     config: Config,
     error: Error | string,
     additionalContext?: Record<string, unknown>
-): Promise<void> {
-    if (ERROR_REPORTING_HARD_DISABLED) return
-    if (config.errorReporting?.enabled === false) return
+): Promise<string | null> {
+    if (ERROR_REPORTING_HARD_DISABLED) return null
+    if (config.errorReporting?.enabled === false) return null
 
     try {
         const payload = buildErrorReportPayload(error, additionalContext)
-        if (!payload) return
+        if (!payload) return null
 
         const apiUrl =
             config.errorReporting?.apiUrl ||
@@ -179,19 +184,24 @@ export async function sendErrorReport(
             Authorization: cachedAuthorization!
         }
 
-        await axios.post(apiUrl, payload, {
+        const response = await axios.post(apiUrl, payload, {
             headers,
             timeout: 15_000
         })
+
+        return response.data?.id || null
     } catch {
         // Error reporting must NEVER throw
+        return null
     }
 }
 
 /**
- * Resolve project version safely
+ * Resolve project version safely (cached)
  */
 function getProjectVersion(): string {
+    if (cachedProjectVersion) return cachedProjectVersion
+
     const paths = [
         path.join(process.cwd(), 'package.json'),
         path.join(__dirname, '../../../package.json'),
@@ -203,12 +213,16 @@ function getProjectVersion(): string {
             if (fs.existsSync(p)) {
                 const raw = fs.readFileSync(p, 'utf-8')
                 const pkg = JSON.parse(raw)
-                if (pkg?.version) return pkg.version
+                if (pkg?.version) {
+                    cachedProjectVersion = pkg.version
+                    return pkg.version
+                }
             }
         } catch {
             continue
         }
     }
 
+    cachedProjectVersion = 'unknown'
     return 'unknown'
 }

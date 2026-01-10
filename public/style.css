@@ -140,6 +140,22 @@ body {
   background: var(--bg-secondary);
 }
 
+.logs-toggle {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.logs-toggle:hover {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
 /* Status Badge */
 .status-badge {
   display: flex;

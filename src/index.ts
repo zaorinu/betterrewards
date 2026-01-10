@@ -72,6 +72,10 @@ export class MicrosoftRewardsBot {
 
     public axios!: AxiosClient
 
+    getCurrentFarmingEmail(): string | undefined {
+        return this.currentAccountEmail
+    }
+
     constructor(isMobile: boolean) {
         this.isMobile = isMobile
         this.log = log
@@ -79,6 +83,10 @@ export class MicrosoftRewardsBot {
         this.accounts = []
         this.utils = new Util()
         this.config = loadConfig()
+        if (process.argv.includes('--show-logs')) {
+            this.config.logging = this.config.logging || {}
+            this.config.logging.consoleEnabled = true
+        }
         this.enforceHumanization()
         // JobState will be initialized in initialize() method after validation
         this.browser = {
@@ -95,14 +103,18 @@ export class MicrosoftRewardsBot {
         this.accounts = loadAccounts()
 
         // Run comprehensive startup validation
-        const validator = new StartupValidator()
-        try {
-            await validator.validate(this.config, this.accounts)
-        } catch (error) {
-            // Critical validation errors prevent startup
-            const errorMsg = error instanceof Error ? error.message : String(error)
-            log('main', 'VALIDATION', `Fatal validation error: ${errorMsg}`, 'error')
-            throw error // Re-throw to stop execution
+        if (!this.config.skipValidation) {
+            const validator = new StartupValidator()
+            try {
+                await validator.validate(this.config, this.accounts)
+            } catch (error) {
+                // Critical validation errors prevent startup
+                const errorMsg = error instanceof Error ? error.message : String(error)
+                log('main', 'VALIDATION', `Fatal validation error: ${errorMsg}`, 'error')
+                throw error // Re-throw to stop execution
+            }
+        } else {
+            log('main', 'STARTUP', 'Skipping validation as requested')
         }
 
         // Validation passed - continue with initialization
@@ -247,8 +259,8 @@ export class MicrosoftRewardsBot {
         const shouldStartUi = forceUi || (isInteractive && !disableUi)
         if (shouldStartUi) {
             const ver = this.getVersion()
-            const acct = this.currentAccountEmail ?? (this.accounts[0]?.email ?? '***hidden***')
-            try { SimpleUI.startUI({ versionStr: `v${ver}`, account: acct }) } catch { /* ignore UI errors */ }
+            const acct: string | undefined = undefined // Will be updated dynamically from logs
+            try { SimpleUI.startUI({ versionStr: `v${ver}`, account: acct, config: this.config }) } catch { /* ignore UI errors */ }
         } else {
             this.printBanner()
         }
@@ -1053,8 +1065,8 @@ async function main(): Promise<void> {
         const shouldStartUi = forceUi || (isInteractive && !disableUi)
         if (shouldStartUi) {
             const ver = rewardsBot.getVersion()
-            const acct = rewardsBot.currentAccountEmail ?? (rewardsBot.getSummaries()?.[0]?.email ?? '***hidden***')
-            SimpleUI.startUI({ versionStr: `v${ver}`, account: acct })
+            const acct: string | undefined = undefined // Will be updated dynamically from logs
+            SimpleUI.startUI({ versionStr: `v${ver}`, account: acct, config: rewardsBot.config })
         }
     } catch { /* non-critical */ }
 

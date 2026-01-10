@@ -1,27 +1,31 @@
 import chalk from 'chalk'
 import { logEventEmitter } from '../util/notifications/Logger'
+import { sendErrorReport } from '../util/notifications/ErrorReportingWebhook'
 
 type LogEntry = { timestamp: string; level: string; platform: string; title: string; message: string }
 
 const PINK = chalk.hex('#ff66cc')
 
 let logs: string[] = []
-let showingLogs = true
+let showingLogs = false // Start with main screen, not logs
 let interval: NodeJS.Timeout | null = null
 let uiActive = false
 let startTime = Date.now()
 let version = 'v?' 
-let accountDisplay = ''
+let accountDisplay: string | undefined = undefined
+let config: any = null
+let errorIDs: string[] = []
 
-function partialAccount(s: string | undefined) {
-    if (!s) return '***hidden***'
-    if (s === '***hidden***') return s
+function partialAccount(s: string | undefined): string {
+    if (!s) return 'No account selected'
+    if (s === '***hidden***') return 'Account hidden'
     const at = s.indexOf('@')
     if (at === -1) return s.slice(0, 3) + (s.length > 3 ? '***' : '')
     const user = s.slice(0, at)
     const domain = s.slice(at + 1)
-    const visible = user.slice(0, Math.min(3, user.length))
-    return `${visible}***@${domain}`
+    if (user.length <= 2) return `***@${domain}`
+    const visible = user.slice(-2)
+    return `***${visible}@${domain}`
 }
 let lastDraw = ''
 let logOffset = 0 // 0 = follow tail
@@ -67,6 +71,9 @@ function formatMainScreen(): string {
 
     const elapsed = formatElapsed(Date.now() - startTime)
 
+    const accountText = partialAccount(accountDisplay)
+    const statusLine = accountText ? `  Farming points on account ${accountText}` : '  Loading profiles...'
+
     const banner = [
         ' ',
         ' ',
@@ -76,7 +83,7 @@ function formatMainScreen(): string {
         '88b     d88     88b    88b  ,88b  d88  d88  88P',
         "`?888P'd88'     `?888P'`?88P'`88bd88' d88'  88b",
         ' ',
-        `  Farming points on account ${partialAccount(accountDisplay)}`,
+        statusLine,
         ' ',
         `   Run time: [${elapsed}]`,
         `   Version: ${version}`,
@@ -138,15 +145,42 @@ function onLog(e: LogEntry) {
     const line = `[${new Date(e.timestamp).toLocaleString()}] [${e.platform}] ${e.level.toUpperCase()} [${e.title}] ${e.message}`
     logs.push(line)
     if (logs.length > 500) logs.shift()
-    if (showingLogs) draw()
+
+    // Detect current processing account
+    if (e.title === 'MAIN-WORKER' && e.message.startsWith('Started tasks for account')) {
+        const email = e.message.replace('Started tasks for account ', '').trim()
+        if (email && !accountDisplay) {
+            accountDisplay = email
+            // Draw will be called by interval
+        }
+    }
+
+    // Error reporting for SimpleUI
+    if (e.level === 'error' && config) {
+        const errorObj = new Error(line)
+        void (async () => {
+            try {
+                const id = await sendErrorReport(config, errorObj, {
+                    title: e.title,
+                    platform: e.platform
+                })
+                if (id) {
+                    errorIDs.push(id)
+                }
+            } catch (reportError) {
+                // Non-critical: silently ignore reporting errors
+            }
+        })()
+    }
 }
 
-export function startUI(opts: { versionStr?: string; account?: string } = {}) {
+export function startUI(opts: { versionStr?: string; account?: string | undefined; config?: any } = {}) {
     if (uiActive) return
     uiActive = true
     startTime = Date.now()
     if (opts.versionStr) version = opts.versionStr
-    if (opts.account) accountDisplay = opts.account
+    // Do not set accountDisplay here to avoid overwriting detected accounts
+    if (opts.config) config = opts.config
 
     // Enter alternate screen and hide cursor to avoid polluting scrollback
     try { process.stdout.write('\x1B[?1049h') } catch { }
@@ -154,6 +188,21 @@ export function startUI(opts: { versionStr?: string; account?: string } = {}) {
 
     // Subscribe to logs
     logEventEmitter.on('log', onLog)
+
+    // Start periodic draw for clock updates
+    interval = setInterval(() => {
+        if (uiActive) draw()
+    }, 1000) // Update every second
+
+    // Initial draw
+    draw()
+
+    // Handle exit to show error summary
+    process.on('exit', (code) => {
+        if (code !== 0 && uiActive) {
+            stopUI()
+        }
+    })
 
     // Key handler
     if (process.stdin && process.stdin.setRawMode) {
@@ -231,7 +280,15 @@ export function stopUI() {
     try { process.stdin.setRawMode(false) } catch { }
 
     // Small message to inform the user that the UI closed and logs will continue normally
-    try { console.log('\nEasy UI closed. Logs will continue to STDOUT.\n') } catch { }
+    if (errorIDs.length > 0) {
+        try { 
+            console.log(`\nDetected ${errorIDs.length} critical error(s) during session.`)
+            console.log(`Error IDs: ${errorIDs.join(', ')}`)
+            console.log('Please report these IDs for support.\n')
+        } catch { }
+    } else {
+        try { console.log('\nEasy UI closed. Logs will continue to STDOUT.\n') } catch { }
+    }
 }
 
 // Ensure we export for integration

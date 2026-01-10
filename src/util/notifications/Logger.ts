@@ -152,7 +152,7 @@ function determineColorFromContent(content: string): number {
  * Type guard to check if config has valid logging configuration
  * IMPROVED: Enhanced edge case handling and null checks
  */
-function hasValidLogging(config: unknown): config is { logging: { excludeFunc?: string[]; webhookExcludeFunc?: string[]; redactEmails?: boolean; liveWebhookUrl?: string } } {
+function hasValidLogging(config: unknown): config is { logging: { excludeFunc?: string[]; webhookExcludeFunc?: string[]; redactEmails?: boolean; consoleEnabled?: boolean; liveWebhookUrl?: string } } {
     if (typeof config !== 'object' || config === null) {
         return false
     }
@@ -227,9 +227,11 @@ export function log(isMobile: boolean | 'main', title: string, message: string, 
     const platformText = isMobile === 'main' ? 'MAIN' : isMobile ? 'MOBILE' : 'DESKTOP'
 
     // Clean string for notifications (no chalk, structured)
-    type LoggingCfg = { excludeFunc?: string[]; webhookExcludeFunc?: string[]; redactEmails?: boolean }
+    type LoggingCfg = { excludeFunc?: string[]; webhookExcludeFunc?: string[]; redactEmails?: boolean; consoleEnabled?: boolean }
     const loggingCfg: LoggingCfg = logging || {}
     const shouldRedact = !!loggingCfg.redactEmails
+    const consoleEnabled = loggingCfg.consoleEnabled !== false // Default true
+
     const redactSensitive = (s: string) => {
         const scrubbed = s
             .replace(/:\/\/[A-Z0-9._%+-]+:[^@\s]+@/ig, '://***:***@')
@@ -311,19 +313,21 @@ export function log(isMobile: boolean | 'main', title: string, message: string, 
 
     const applyChalk = color && typeof chalk[color] === 'function' ? chalk[color] as (msg: string) => string : null
 
-    // Log based on the type
-    switch (type) {
-        case 'warn':
-            applyChalk ? console.warn(applyChalk(formattedStr)) : console.warn(formattedStr)
-            break
+    // Log to console if enabled
+    if (consoleEnabled) {
+        switch (type) {
+            case 'warn':
+                applyChalk ? console.warn(applyChalk(formattedStr)) : console.warn(formattedStr)
+                break
 
-        case 'error':
-            applyChalk ? console.error(applyChalk(formattedStr)) : console.error(formattedStr)
-            break
+            case 'error':
+                applyChalk ? console.error(applyChalk(formattedStr)) : console.error(formattedStr)
+                break
 
-        default:
-            applyChalk ? console.log(applyChalk(formattedStr)) : console.log(formattedStr)
-            break
+            default:
+                applyChalk ? console.log(applyChalk(formattedStr)) : console.log(formattedStr)
+                break
+        }
     }
 
     // Emit log event for dashboard (CLEAN - no function interception)

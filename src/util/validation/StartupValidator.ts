@@ -26,18 +26,20 @@ export class StartupValidator {
   async validate(config: Config, accounts: Account[]): Promise<boolean> {
     log('main', 'STARTUP', 'Running configuration validation...')
 
-    // Run all validation checks
-    this.validateAccounts(accounts)
-    this.validateConfig(config)
-    this.validateEnvironment()
-    this.validateFileSystem(config)
-    this.validateBrowserSettings(config)
-    this.validateNetworkSettings(config)
-    this.validateWorkerSettings(config)
-    this.validateExecutionSettings(config)
-    this.validateSearchSettings(config)
-    this.validateHumanizationSettings(config)
-    this.validateSecuritySettings(config)
+    // Run all validation checks in parallel for speed
+    await Promise.all([
+      Promise.resolve(this.validateAccounts(accounts)),
+      Promise.resolve(this.validateConfig(config)),
+      Promise.resolve(this.validateEnvironment()),
+      Promise.resolve(this.validateFileSystem(config)),
+      Promise.resolve(this.validateBrowserSettings(config)),
+      Promise.resolve(this.validateNetworkSettings(config)),
+      Promise.resolve(this.validateWorkerSettings(config)),
+      Promise.resolve(this.validateExecutionSettings(config)),
+      Promise.resolve(this.validateSearchSettings(config)),
+      Promise.resolve(this.validateHumanizationSettings(config)),
+      Promise.resolve(this.validateSecuritySettings(config))
+    ])
 
     // Display results (await to respect the delay)
     await this.displayResults()
